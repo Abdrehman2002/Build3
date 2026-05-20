@@ -1,0 +1,8 @@
+# LiveKit SIP config — runs on Nayatel VM (101.50.85.186)
+api_key: 42cd3baa67acb1a56fb272e8199ea07714e095aa
+api_secret: c3f83951a178581c221fb9b7d203a89686194d651c9ccf5cec6cd659ebc3869d
+ws_url: wss://livekit.vextriaai.com
+logging:
+  level: info
+sip_port: 5060
+rtp_port: 10000-20000

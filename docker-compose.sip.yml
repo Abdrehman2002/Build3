@@ -1,0 +1,20 @@
+version: "3.9"
+
+# LiveKit SIP service — runs on Nayatel VM only (101.50.85.186)
+# Start:  docker compose -f docker-compose.sip.yml up -d
+# Logs:   docker compose -f docker-compose.sip.yml logs -f sara-sip
+
+services:
+  sara-sip:
+    image: livekit/sip:latest
+    container_name: sara-sip
+    network_mode: host       # must be host so SIP/RTP ports are directly exposed
+    volumes:
+      - ./sip.yaml:/etc/sip.yaml
+    command: --config /etc/sip.yaml
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
