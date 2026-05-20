@@ -51,7 +51,8 @@ async def main():
                 ),
                 trunk_ids=[trunk.sid],
                 name="Sara SIP Inbound",
-            )
+            ),
+            agent_name="sara",             # dispatch explicitly to Sara agent
         )
     )
     print(f"  Dispatch rule created: {rule.sid}")
