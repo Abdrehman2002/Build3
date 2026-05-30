@@ -489,7 +489,7 @@ def build_llm():
     return llm.FallbackAdapter(engines)
 
 
-def build_stt():
+def build_stt(vad=None):
     deepgram_stt = deepgram.STT(
         model="nova-3",
         language="ur",          # Urdu only — faster than multi-language detection
@@ -498,14 +498,19 @@ def build_stt():
     )
     if USE_SELF_HOSTED:
         logger.info(f"STT: self-hosted Whisper ({LOCAL_STT_URL}) → Deepgram nova-3")
-        # Local Whisper is batch (per VAD-segmented utterance); Deepgram stays as streaming fallback.
+        whisper_stt = lk_openai.STT(
+            model="whisper-1",
+            base_url=LOCAL_STT_URL,
+            api_key="sk-local",
+            language="ur",
+        )
+        # Whisper is batch (non-streaming). FallbackAdapter requires streaming STTs,
+        # so wrap it in StreamAdapter: VAD segments audio into utterances, each sent
+        # to batch Whisper. Deepgram is natively streaming, used as fallback.
+        if vad is not None:
+            whisper_stt = stt.StreamAdapter(stt=whisper_stt, vad=vad)
         return stt.FallbackAdapter([
-            lk_openai.STT(
-                model="whisper-1",
-                base_url=LOCAL_STT_URL,
-                api_key="sk-local",
-                language="ur",
-            ),
+            whisper_stt,
             deepgram_stt,
         ])
     return deepgram_stt
@@ -584,7 +589,7 @@ async def entrypoint(ctx: JobContext):
     vad = ctx.proc.userdata.get("vad") or silero.VAD.load()
 
     session_kwargs: dict = dict(
-        stt=build_stt(),
+        stt=build_stt(vad),
         llm=build_llm(),
         tts=build_tts(),
         vad=vad,
