@@ -22,3 +22,7 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Large binaries (exceed GitHub 100MB limit)
+lk.exe
+*.exe
