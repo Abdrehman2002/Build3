@@ -26,7 +26,7 @@ try:
     HAS_TURN_HANDLING = True
 except ImportError:
     HAS_TURN_HANDLING = False
-from livekit.agents import llm, tts
+from livekit.agents import llm, stt, tts
 from livekit.plugins import deepgram, openai as lk_openai, silero, elevenlabs
 
 # ── Optional plugins ─────────────────────────────────────────────────────────
@@ -52,6 +52,17 @@ logger = logging.getLogger("daewoo-sara")
 ELEVENLABS_API_KEY  = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "6wMF5aBsi9xsISTPVsWw")
 OPENAI_API_KEY      = os.getenv("OPENAI_API_KEY", "")
+
+# Self-hosted model stack (Vast.ai GPU box). When USE_SELF_HOSTED=1, the local
+# servers are used as PRIMARY and the cloud providers remain as automatic fallbacks.
+# Set USE_SELF_HOSTED=0 to run cloud-only (the original behavior).
+USE_SELF_HOSTED  = os.getenv("USE_SELF_HOSTED", "0") == "1"
+LOCAL_LLM_URL    = os.getenv("LOCAL_LLM_URL", "http://localhost:8001/v1")
+LOCAL_LLM_MODEL  = os.getenv("LOCAL_LLM_MODEL", "sara-llm")
+LOCAL_STT_URL    = os.getenv("LOCAL_STT_URL", "http://localhost:8002/v1")
+LOCAL_TTS_URL    = os.getenv("LOCAL_TTS_URL", "http://localhost:8003/v1")
+LOCAL_TTS_MODEL  = os.getenv("LOCAL_TTS_MODEL", "orpheus")
+LOCAL_TTS_VOICE  = os.getenv("LOCAL_TTS_VOICE", "")
 
 # Dashboard (Next.js) — agent pushes complaints + metrics here
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:3000")
@@ -463,25 +474,57 @@ class DaewooAgent(Agent):
 # ── Pipeline builders ─────────────────────────────────────────────────────────
 
 def build_llm():
-    return llm.FallbackAdapter([
-        lk_openai.LLM(model="gpt-4o"),       # Best quality for natural Urdu conversation
-        lk_openai.LLM(model="gpt-4o-mini"),  # Fallback
-    ])
+    engines = []
+    if USE_SELF_HOSTED:
+        logger.info(f"LLM: self-hosted Qwen ({LOCAL_LLM_URL}) → GPT-4o → GPT-4o-mini")
+        engines.append(lk_openai.LLM(
+            model=LOCAL_LLM_MODEL,
+            base_url=LOCAL_LLM_URL,
+            api_key="sk-local",
+        ))
+    engines += [
+        lk_openai.LLM(model="gpt-4o"),       # cloud fallback (best Urdu quality)
+        lk_openai.LLM(model="gpt-4o-mini"),  # cloud fallback 2
+    ]
+    return llm.FallbackAdapter(engines)
 
 
 def build_stt():
-    return deepgram.STT(
+    deepgram_stt = deepgram.STT(
         model="nova-3",
         language="ur",          # Urdu only — faster than multi-language detection
         punctuate=True,
         interim_results=True,
     )
+    if USE_SELF_HOSTED:
+        logger.info(f"STT: self-hosted Whisper ({LOCAL_STT_URL}) → Deepgram nova-3")
+        # Local Whisper is batch (per VAD-segmented utterance); Deepgram stays as streaming fallback.
+        return stt.FallbackAdapter([
+            lk_openai.STT(
+                model="whisper-1",
+                base_url=LOCAL_STT_URL,
+                api_key="sk-local",
+                language="ur",
+            ),
+            deepgram_stt,
+        ])
+    return deepgram_stt
 
 
 def build_tts():
+    engines = []
+    if USE_SELF_HOSTED:
+        logger.info(f"TTS: self-hosted Orpheus ({LOCAL_TTS_URL}) → ElevenLabs → OpenAI nova")
+        # Orpheus exposes an OpenAI-compatible /v1/audio/speech endpoint, so the
+        # standard OpenAI TTS plugin drives it directly (no custom plugin needed).
+        engines.append(lk_openai.TTS(
+            model=LOCAL_TTS_MODEL,
+            voice=LOCAL_TTS_VOICE or "alloy",  # server ignores voice (single-speaker Urdu model)
+            base_url=LOCAL_TTS_URL,
+            api_key="sk-local",
+        ))
     if ELEVENLABS_API_KEY:
-        logger.info("TTS: ElevenLabs multilingual_v2 → turbo_v2_5 → OpenAI nova")
-        return tts.FallbackAdapter([
+        engines += [
             # multilingual_v2: highest quality, best Urdu pronunciation
             elevenlabs.TTS(
                 voice_id=ELEVENLABS_VOICE_ID,
@@ -509,9 +552,11 @@ def build_tts():
                 ),
             ),
             lk_openai.TTS(model="tts-1", voice="nova"),
-        ])
-    logger.warning("TTS: ElevenLabs key missing — using OpenAI nova only")
-    return lk_openai.TTS(model="tts-1", voice="nova")
+        ]
+    else:
+        logger.warning("TTS: ElevenLabs key missing — OpenAI nova as fallback")
+        engines.append(lk_openai.TTS(model="tts-1", voice="nova"))
+    return engines[0] if len(engines) == 1 else tts.FallbackAdapter(engines)
 
 
 def prewarm(proc: agents.JobProcess):
