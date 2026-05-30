@@ -522,6 +522,7 @@ def build_tts():
             voice=LOCAL_TTS_VOICE or "alloy",  # server ignores voice (single-speaker Urdu model)
             base_url=LOCAL_TTS_URL,
             api_key="sk-local",
+            response_format="wav",  # Orpheus server returns 24kHz WAV
         ))
     if ELEVENLABS_API_KEY:
         engines += [
