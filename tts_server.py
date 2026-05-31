@@ -82,7 +82,7 @@ def speech(req: SpeechReq):
             attention_mask=torch.ones_like(full),
             max_new_tokens=2000,
             do_sample=True,
-            temperature=0.6,
+            temperature=0.8,
             top_p=0.9,
             repetition_penalty=1.1,
             eos_token_id=128258,
