@@ -636,7 +636,9 @@ async def entrypoint(ctx: JobContext):
         tts=build_tts(),
         vad=vad,
         preemptive_generation=True,
-        tts_text_transforms=[_fix_pronunciation],
+        # _fix_pronunciation is ElevenLabs-tuned (rewrites Urdu→Roman). Orpheus is
+        # Urdu-native and wants the original script, so skip it when self-hosted.
+        tts_text_transforms=[] if USE_SELF_HOSTED else [_fix_pronunciation],
     )
 
     # Faster turn detection — respond sooner after user stops speaking
