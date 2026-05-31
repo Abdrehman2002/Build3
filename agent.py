@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import uuid
 from datetime import date, datetime, timezone
 from typing import Annotated
 
@@ -27,6 +28,7 @@ try:
 except ImportError:
     HAS_TURN_HANDLING = False
 from livekit.agents import llm, stt, tts
+from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS
 from livekit.plugins import deepgram, openai as lk_openai, silero, elevenlabs
 
 # ── Optional plugins ─────────────────────────────────────────────────────────
@@ -516,19 +518,55 @@ def build_stt(vad=None):
     return deepgram_stt
 
 
+class OrpheusTTS(tts.TTS):
+    """Streams raw 24kHz PCM from the local Orpheus server straight into LiveKit,
+    bypassing the OpenAI plugin's decoder (which couldn't consume our response)."""
+
+    def __init__(self, base_url: str):
+        super().__init__(
+            capabilities=tts.TTSCapabilities(streaming=False),
+            sample_rate=24000,
+            num_channels=1,
+        )
+        self._base_url = base_url.rstrip("/")
+
+    def synthesize(self, text, *, conn_options=DEFAULT_API_CONNECT_OPTIONS):
+        return _OrpheusChunkedStream(
+            tts=self, input_text=text, conn_options=conn_options, base_url=self._base_url
+        )
+
+
+class _OrpheusChunkedStream(tts.ChunkedStream):
+    def __init__(self, *, tts, input_text, conn_options, base_url):
+        super().__init__(tts=tts, input_text=input_text, conn_options=conn_options)
+        self._base_url = base_url
+
+    async def _run(self, output_emitter: tts.AudioEmitter) -> None:
+        async with aiohttp.ClientSession() as sess:
+            async with sess.post(
+                f"{self._base_url}/audio/speech",
+                json={"input": self.input_text, "response_format": "pcm"},
+                timeout=aiohttp.ClientTimeout(total=60),
+            ) as resp:
+                resp.raise_for_status()
+                output_emitter.initialize(
+                    request_id=uuid.uuid4().hex,
+                    sample_rate=24000,
+                    num_channels=1,
+                    mime_type="audio/pcm",
+                )
+                async for chunk in resp.content.iter_chunked(8192):
+                    output_emitter.push(chunk)
+                output_emitter.flush()
+
+
 def build_tts():
     engines = []
     if USE_SELF_HOSTED:
         logger.info(f"TTS: self-hosted Orpheus ({LOCAL_TTS_URL}) → ElevenLabs → OpenAI nova")
         # Orpheus exposes an OpenAI-compatible /v1/audio/speech endpoint, so the
         # standard OpenAI TTS plugin drives it directly (no custom plugin needed).
-        engines.append(lk_openai.TTS(
-            model=LOCAL_TTS_MODEL,
-            voice=LOCAL_TTS_VOICE or "alloy",  # server ignores voice (single-speaker Urdu model)
-            base_url=LOCAL_TTS_URL,
-            api_key="sk-local",
-            response_format="pcm",  # raw 24kHz PCM — plugin plays samples directly
-        ))
+        engines.append(OrpheusTTS(base_url=LOCAL_TTS_URL))
     if ELEVENLABS_API_KEY:
         engines += [
             # multilingual_v2: highest quality, best Urdu pronunciation
