@@ -522,6 +522,22 @@ def build_stt(vad=None):
     return deepgram_stt
 
 
+# Words the Urdu Orpheus model mispronounces. Swap to a spelling it says correctly
+# before synthesis (loan-words/names render better in English). Easy to extend.
+ORPHEUS_PRONUNCIATION = {
+    "احمد": "Ahmed",
+    "بُکنگ": "booking",
+    "بکنگ": "booking",
+    "شکایت": "complaint",
+}
+
+
+def _orpheus_fix(text: str) -> str:
+    for src, dst in ORPHEUS_PRONUNCIATION.items():
+        text = text.replace(src, dst)
+    return text
+
+
 class OrpheusTTS(tts.TTS):
     """Streams raw 24kHz PCM from the local Orpheus server straight into LiveKit,
     bypassing the OpenAI plugin's decoder (which couldn't consume our response)."""
@@ -546,11 +562,12 @@ class _OrpheusChunkedStream(tts.ChunkedStream):
         self._base_url = base_url
 
     async def _run(self, output_emitter: tts.AudioEmitter) -> None:
-        logger.info(f"OrpheusTTS input: {self.input_text!r}")
+        text = _orpheus_fix(self.input_text)
+        logger.info(f"OrpheusTTS input: {self.input_text!r} -> {text!r}")
         async with aiohttp.ClientSession() as sess:
             async with sess.post(
                 f"{self._base_url}/audio/speech",
-                json={"input": self.input_text, "response_format": "pcm"},
+                json={"input": text, "response_format": "pcm"},
                 timeout=aiohttp.ClientTimeout(total=60),
             ) as resp:
                 resp.raise_for_status()
