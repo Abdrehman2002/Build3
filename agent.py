@@ -430,7 +430,8 @@ class DaewooAgent(Agent):
         # Use say() instead of generate_reply() — speaks instantly without LLM round trip
         await self.session.say(
             "السلام علیکم! میں احمد ہوں، Daewoo Express کی طرف سے۔ "
-            "آپ کی کیا مدد کر سکتا ہوں — booking check کرنی ہے یا کوئی complaint؟"
+            "آپ کی کیا مدد کر سکتا ہوں — booking check کرنی ہے یا کوئی complaint؟",
+            allow_interruptions=False,
         )
 
     @function_tool
