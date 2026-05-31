@@ -78,7 +78,15 @@ def decode_window(window_codes):
             return None
     with torch.inference_mode():
         audio = snac.decode([t0, t1, t2])
-    return audio.squeeze().detach().cpu().float().numpy()
+    arr = audio.squeeze().detach().cpu().float().numpy()
+    global _logged
+    if not _logged:
+        print(f"[debug] {n} frames -> {len(arr)} samples ({len(arr)//n}/frame)", flush=True)
+        _logged = True
+    return arr
+
+
+_logged = False
 
 
 def stream_pcm(text):
