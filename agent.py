@@ -555,9 +555,12 @@ class _OrpheusChunkedStream(tts.ChunkedStream):
                     num_channels=1,
                     mime_type="audio/pcm",
                 )
+                total = 0
                 async for chunk in resp.content.iter_chunked(8192):
                     output_emitter.push(chunk)
+                    total += len(chunk)
                 output_emitter.flush()
+                logger.info(f"OrpheusTTS pushed {total} PCM bytes (text={len(self.input_text)} chars)")
 
 
 def build_tts():
