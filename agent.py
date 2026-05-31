@@ -430,8 +430,9 @@ class DaewooAgent(Agent):
         # LLM generates the opening greeting (pure Urdu, per the system prompt).
         self.session.generate_reply(
             instructions=(
-                "Greet the caller warmly as Ahmed from Daewoo Express, speaking entirely in Urdu, "
-                "and ask how you can help — booking inquiry or complaint. One short, natural sentence."
+                "گرم جوشی سے سلام کریں اور بتائیں کہ آپ احمد ہیں، ڈائیوو ایکسپریس کی طرف سے۔ "
+                "پوچھیں کہ آپ کیسے مدد کر سکتے ہیں — بکنگ دیکھنی ہے یا کوئی شکایت درج کرانی ہے۔ "
+                "صرف سادہ اردو رسم الخط میں جواب دیں، کوئی انگریزی یا رومن حروف نہیں۔ صرف ایک مختصر فطری جملہ۔"
             ),
             allow_interruptions=False,
         )
