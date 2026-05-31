@@ -546,6 +546,7 @@ class _OrpheusChunkedStream(tts.ChunkedStream):
         self._base_url = base_url
 
     async def _run(self, output_emitter: tts.AudioEmitter) -> None:
+        logger.info(f"OrpheusTTS input: {self.input_text!r}")
         async with aiohttp.ClientSession() as sess:
             async with sess.post(
                 f"{self._base_url}/audio/speech",
