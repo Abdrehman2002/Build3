@@ -36,6 +36,8 @@ class SpeechReq(BaseModel):
     voice: str = ""
     model: str = "orpheus"
     response_format: str = "wav"
+    window: int = WINDOW_FRAMES
+    emit: int = EMIT_IDX
 
 
 def build_inputs(text):
@@ -89,16 +91,18 @@ def decode_window(window_codes):
 _logged = False
 
 
-def stream_pcm(text):
+def stream_pcm(text, window_frames=WINDOW_FRAMES, emit_idx=EMIT_IDX, seed=None):
     inputs = build_inputs(text)
     streamer = TokenStreamer()
+    if seed is not None:
+        torch.manual_seed(seed)
     kwargs = dict(
         input_ids=inputs, attention_mask=torch.ones_like(inputs), max_new_tokens=2000,
         do_sample=True, temperature=0.8, top_p=0.9, repetition_penalty=1.1,
         eos_token_id=128258, streamer=streamer,
     )
     threading.Thread(target=lambda: model.generate(**kwargs), daemon=True).start()
-    win = WINDOW_FRAMES * 7
+    win = window_frames * 7
     index = 0
     buf = []
     while True:
@@ -115,7 +119,7 @@ def stream_pcm(text):
         if index % 7 == 0 and len(buf) >= win:
             audio = decode_window(buf[-win:])
             if audio is not None:
-                s = EMIT_IDX * FRAME_SAMPLES
+                s = emit_idx * FRAME_SAMPLES
                 chunk = audio[s:s + FRAME_SAMPLES]
                 yield (np.clip(chunk, -1, 1) * 32767).astype(np.int16).tobytes()
 
@@ -123,8 +127,8 @@ def stream_pcm(text):
 @app.post("/v1/audio/speech")
 def speech(req: SpeechReq):
     if req.response_format == "pcm":
-        return StreamingResponse(stream_pcm(req.input), media_type="audio/pcm")
-    data = b"".join(stream_pcm(req.input))
+        return StreamingResponse(stream_pcm(req.input, req.window, req.emit), media_type="audio/pcm")
+    data = b"".join(stream_pcm(req.input, req.window, req.emit, seed=0))
     if not data:
         return Response(content=b"no audio", status_code=500)
     buf = io.BytesIO()
