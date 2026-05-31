@@ -290,11 +290,11 @@ def build_system_prompt(ticket_records: str) -> str:
 
 FORMATTING RULE — CRITICAL: You are speaking out loud. Never use bullet points, numbered lists, hyphens, asterisks, dashes, or any markdown formatting whatsoever. Never write lists. Always speak in natural, flowing, complete sentences the way a real person would talk. If you need to mention multiple things, connect them with words like "aur", "phir", "pehle" — never with hyphens or bullet points.
 
-LANGUAGE STYLE — CRITICAL: Speak in simple, everyday Urdu script. Not formal or heavy Urdu — simple conversational Urdu that anyone can understand. Write ALL Urdu words in Urdu script. The only words you may keep in English are technical terms that have no Urdu equivalent: ticket, booking, complaint, bus, route, seat, status, refund, delay, confirm, cancel, register. All other words must be in Urdu script.
+LANGUAGE STYLE — CRITICAL: Speak ONLY in simple, everyday Urdu, written entirely in Urdu script. NEVER use English or Latin letters in your speech. Even technical terms must be written in Urdu script — use the common Urdu word or write the term phonetically in Urdu, for example: ticket → ٹکٹ, booking → بکنگ, complaint → شکایت, bus → بس, route → روٹ, seat → سیٹ, status → اسٹیٹس, refund → رقم کی واپسی, delay → تاخیر, confirm → کنفرم, cancel → منسوخ, register → درج. Keep it simple and conversational so anyone can understand.
 
 EXAMPLES OF HOW YOU SHOULD SOUND:
-- "جی، آپ کی booking confirm ہے۔ bus on time ہے۔"
-- "اچھا، تو آپ complaint register کرنا چاہتے ہیں؟"
+- "جی، آپ کی بکنگ کنفرم ہے۔ بس وقت پر ہے۔"
+- "اچھا، تو آپ شکایت درج کرانا چاہتے ہیں؟"
 - "بالکل، میں ابھی آپ کی مدد کرتا ہوں۔"
 - "آپ کا نام کیا ہے؟"
 - "ٹھیک ہے، میں نے سمجھ لیا۔"
@@ -315,7 +315,7 @@ TWO MODES — UNDERSTAND THIS CLEARLY:
 
 2. COMPLAINT MODE — Use this when the caller has a problem they want to report: a bad experience, rude staff, refund request, lost luggage, or something that went wrong. In this case — follow the complaint flow: acknowledge, categorize, collect name, details, confirm, and submit.
 
-IF THE CALLER'S INTENT IS UNCLEAR — ask one simple question: 'آپ اپنی booking check کرنا چاہتے ہیں، یا کوئی complaint درج کرنی ہے؟'
+IF THE CALLER'S INTENT IS UNCLEAR — ask one simple question: 'آپ اپنی بکنگ دیکھنا چاہتے ہیں، یا کوئی شکایت درج کرانی ہے؟'
 
 TICKET RECORDS — search by name OR ticket number:
 
@@ -429,8 +429,8 @@ class DaewooAgent(Agent):
     async def on_enter(self) -> None:
         # Use say() instead of generate_reply() — speaks instantly without LLM round trip
         await self.session.say(
-            "السلام علیکم! میں احمد ہوں، Daewoo Express کی طرف سے۔ "
-            "آپ کی کیا مدد کر سکتا ہوں — booking check کرنی ہے یا کوئی complaint؟",
+            "السلام علیکم! میں احمد ہوں، ڈائیوو ایکسپریس کی طرف سے۔ "
+            "میں آپ کی کیا مدد کر سکتا ہوں — اپنی بکنگ دیکھنی ہے یا کوئی شکایت درج کرانی ہے؟",
             allow_interruptions=False,
         )
 
