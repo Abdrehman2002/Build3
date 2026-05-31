@@ -525,6 +525,10 @@ def build_stt(vad=None):
 # Words the Urdu Orpheus model mispronounces. Swap to a spelling it says correctly
 # before synthesis (loan-words/names render better in English). Easy to extend.
 ORPHEUS_PRONUNCIATION = {
+    "السلام علیکم": "Assalam o Alaikum",
+    "اسلام علیکم": "Assalam o Alaikum",
+    "ڈائیوو ایکسپریس": "Daewoo Express",
+    "ڈائیو ایکسپریس": "Daewoo Express",
     "احمد": "Ahmed",
     "بُکنگ": "booking",
     "بکنگ": "booking",
