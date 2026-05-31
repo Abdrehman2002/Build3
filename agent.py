@@ -427,10 +427,12 @@ class DaewooAgent(Agent):
         self._complaint_data: dict | None = None
 
     async def on_enter(self) -> None:
-        # Use say() instead of generate_reply() — speaks instantly without LLM round trip
-        await self.session.say(
-            "السلام علیکم! میں احمد ہوں، ڈائیوو ایکسپریس کی طرف سے۔ "
-            "میں آپ کی کیا مدد کر سکتا ہوں — اپنی بکنگ دیکھنی ہے یا کوئی شکایت درج کرانی ہے؟",
+        # LLM generates the opening greeting (pure Urdu, per the system prompt).
+        self.session.generate_reply(
+            instructions=(
+                "Greet the caller warmly as Ahmed from Daewoo Express, speaking entirely in Urdu, "
+                "and ask how you can help — booking inquiry or complaint. One short, natural sentence."
+            ),
             allow_interruptions=False,
         )
 
