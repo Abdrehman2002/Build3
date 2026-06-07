@@ -60,6 +60,7 @@ logger = logging.getLogger("daewoo-sara")
 ELEVENLABS_API_KEY  = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "6wMF5aBsi9xsISTPVsWw")
 OPENAI_API_KEY      = os.getenv("OPENAI_API_KEY", "")
+DEEPGRAM_API_KEY    = os.getenv("DEEPGRAM_API_KEY", "")
 
 # Self-hosted model stack (Vast.ai GPU box). When USE_SELF_HOSTED=1, the local
 # servers are used as PRIMARY and the cloud providers remain as automatic fallbacks.
@@ -499,22 +500,27 @@ def build_llm():
             base_url=LOCAL_LLM_URL,
             api_key="sk-local",
         ))
-    engines += [
-        lk_openai.LLM(model="gpt-4o"),       # cloud fallback (best Urdu quality)
-        lk_openai.LLM(model="gpt-4o-mini"),  # cloud fallback 2
-    ]
-    return llm.FallbackAdapter(engines)
+    if OPENAI_API_KEY:
+        engines += [
+            lk_openai.LLM(model="gpt-4o"),       # cloud fallback (best Urdu quality)
+            lk_openai.LLM(model="gpt-4o-mini"),  # cloud fallback 2
+        ]
+    if not engines:
+        raise RuntimeError("No LLM configured — set USE_SELF_HOSTED=1 or OPENAI_API_KEY")
+    return engines[0] if len(engines) == 1 else llm.FallbackAdapter(engines)
 
 
 def build_stt(vad=None):
-    deepgram_stt = deepgram.STT(
-        model="nova-3",
-        language="ur",          # Urdu only — faster than multi-language detection
-        punctuate=True,
-        interim_results=True,
-    )
+    deepgram_stt = None
+    if DEEPGRAM_API_KEY:
+        deepgram_stt = deepgram.STT(
+            model="nova-3",
+            language="ur",          # Urdu only — faster than multi-language detection
+            punctuate=True,
+            interim_results=True,
+        )
     if USE_SELF_HOSTED:
-        logger.info(f"STT: self-hosted Whisper ({LOCAL_STT_URL}) → Deepgram nova-3")
+        logger.info(f"STT: self-hosted Whisper ({LOCAL_STT_URL})" + (" → Deepgram nova-3" if deepgram_stt else ""))
         whisper_stt = lk_openai.STT(
             model="whisper-1",
             base_url=LOCAL_STT_URL,
@@ -523,13 +529,13 @@ def build_stt(vad=None):
         )
         # Whisper is batch (non-streaming). FallbackAdapter requires streaming STTs,
         # so wrap it in StreamAdapter: VAD segments audio into utterances, each sent
-        # to batch Whisper. Deepgram is natively streaming, used as fallback.
+        # to batch Whisper. Deepgram is natively streaming, used as fallback (if key set).
         if vad is not None:
             whisper_stt = stt.StreamAdapter(stt=whisper_stt, vad=vad)
-        return stt.FallbackAdapter([
-            whisper_stt,
-            deepgram_stt,
-        ])
+        engines = [whisper_stt] + ([deepgram_stt] if deepgram_stt else [])
+        return engines[0] if len(engines) == 1 else stt.FallbackAdapter(engines)
+    if deepgram_stt is None:
+        raise RuntimeError("No STT configured — set DEEPGRAM_API_KEY or USE_SELF_HOSTED=1")
     return deepgram_stt
 
 
@@ -639,11 +645,11 @@ def build_tts():
                     use_speaker_boost=True,
                 ),
             ),
-            lk_openai.TTS(model="tts-1", voice="nova"),
         ]
-    else:
-        logger.warning("TTS: ElevenLabs key missing — OpenAI nova as fallback")
-        engines.append(lk_openai.TTS(model="tts-1", voice="nova"))
+    if OPENAI_API_KEY:
+        engines.append(lk_openai.TTS(model="tts-1", voice="nova"))   # cloud TTS fallback
+    if not engines:
+        raise RuntimeError("No TTS configured — set UPLIFTAI_API_KEY, ELEVENLABS_API_KEY, or OPENAI_API_KEY")
     return engines[0] if len(engines) == 1 else tts.FallbackAdapter(engines)
 
 
