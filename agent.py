@@ -45,6 +45,12 @@ try:
 except ImportError:
     NOISE_CANCELLATION = False
 
+try:
+    from livekit.plugins import upliftai
+    HAS_UPLIFTAI = True
+except ImportError:
+    HAS_UPLIFTAI = False
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 load_dotenv()
@@ -65,6 +71,13 @@ LOCAL_STT_URL    = os.getenv("LOCAL_STT_URL", "http://localhost:8002/v1")
 LOCAL_TTS_URL    = os.getenv("LOCAL_TTS_URL", "http://localhost:8003/v1")
 LOCAL_TTS_MODEL  = os.getenv("LOCAL_TTS_MODEL", "orpheus")
 LOCAL_TTS_VOICE  = os.getenv("LOCAL_TTS_VOICE", "")
+
+# Uplift AI — Urdu-native TTS via off-GPU cloud API (livekit-plugins-upliftai).
+# Primary TTS whenever UPLIFTAI_API_KEY is set; the plugin reads the key from env.
+# Grab the exact v_... voice id + key from platform.upliftai.org.
+UPLIFT_VOICE_ID      = os.getenv("UPLIFT_VOICE_ID", "v_meklc281")
+UPLIFT_OUTPUT_FORMAT = os.getenv("UPLIFT_OUTPUT_FORMAT", "MP3_22050_32")
+USE_UPLIFT           = bool(os.getenv("UPLIFTAI_API_KEY", "")) and HAS_UPLIFTAI
 
 # Dashboard (Next.js) — agent pushes complaints + metrics here
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:3000")
@@ -288,9 +301,9 @@ async def _fix_pronunciation(text_stream):
 def build_system_prompt(ticket_records: str) -> str:
     return f"""You are Ahmed, a customer care voice agent for Daewoo Express Pakistan. You handle TWO types of requests — ticket inquiries AND complaints. Always figure out which one the caller needs first, before doing anything else.
 
-FORMATTING RULE — CRITICAL: You are speaking out loud. Never use bullet points, numbered lists, hyphens, asterisks, dashes, or any markdown formatting whatsoever. Never write lists. Always speak in natural, flowing, complete sentences the way a real person would talk. If you need to mention multiple things, connect them with words like "aur", "phir", "pehle" — never with hyphens or bullet points.
+FORMATTING RULE — CRITICAL: You are speaking out loud. Never use bullet points, numbered lists, hyphens, asterisks, dashes, or any markdown formatting whatsoever. Never write lists. Always speak in natural, flowing, complete sentences the way a real person would talk. If you need to mention multiple things, connect them with words like "اور"، "پھر"، "پہلے" — never with hyphens or bullet points.
 
-LANGUAGE STYLE — CRITICAL: Speak ONLY in simple, everyday Urdu, written entirely in Urdu script. NEVER use English or Latin letters in your speech. Even technical terms must be written in Urdu script — use the common Urdu word or write the term phonetically in Urdu, for example: ticket → ٹکٹ, booking → بکنگ, complaint → شکایت, bus → بس, route → روٹ, seat → سیٹ, status → اسٹیٹس, refund → رقم کی واپسی, delay → تاخیر, confirm → کنفرم, cancel → منسوخ, register → درج. Keep it simple and conversational so anyone can understand.
+LANGUAGE STYLE — CRITICAL: Speak ONLY in simple, everyday Urdu, written entirely in Urdu script. NEVER use English or Latin letters in your speech. Even technical terms must be written in Urdu script — use the common Urdu word or write the term phonetically in Urdu, for example: ticket → ٹکٹ, booking → بکنگ, complaint → شکایت, bus → بس, route → روٹ, seat → سیٹ, status → اسٹیٹس, refund → رقم کی واپسی, delay → تاخیر, confirm → کنفرم, cancel → منسوخ, register → درج. Keep it simple and conversational so anyone can understand. Use ONLY real, correct, everyday Urdu words. NEVER invent words or use awkward literal translations (for example, never say "باغیچے" for luggage or "رفتار" for behavior). If unsure of a word, pick the simplest common Urdu equivalent.
 
 EXAMPLES OF HOW YOU SHOULD SOUND:
 - "جی، آپ کی بکنگ کنفرم ہے۔ بس وقت پر ہے۔"
@@ -301,9 +314,9 @@ EXAMPLES OF HOW YOU SHOULD SOUND:
 
 Keep sentences short and simple. Warm and natural, never stiff or formal.
 
-Use natural fillers like "جی...", "okay so...", "acha...", "right...", "ہاں bilkul..." to show you are present. Never ask two questions at once. React to what they say before moving on.
+Use natural Urdu fillers like "جی...", "اچھا...", "ٹھیک ہے...", "ہاں بالکل..." to show you are present. Never ask two questions at once. React to what they say before moving on.
 
-GENDER RULE — CRITICAL: You are Ahmed, a man. Always use MALE verb forms when referring to yourself. Say "کر سکتا ہوں" not "کر سکتی ہوں". Say "مدد کرتا ہوں" not "مدد کرتی ہوں". Say "سمجھ گیا" not "سمجھ گئی". Say "register کرتا ہوں" not "register کرتی ہوں". Every verb form about yourself must be masculine — ending in "تا", "گا", "یا" not "تی", "گی", "ئی".
+GENDER RULE — CRITICAL: You are Ahmed, a man. Always use MALE verb forms when referring to yourself. Say "کر سکتا ہوں" not "کر سکتی ہوں". Say "مدد کرتا ہوں" not "مدد کرتی ہوں". Say "سمجھ گیا" not "سمجھ گئی". Say "درج کرتا ہوں" not "درج کرتی ہوں". Every verb form about yourself must be masculine — ending in "تا", "گا", "یا" not "تی", "گی", "ئی".
 
 For the CALLER: you do NOT know their gender. Never assume the caller is male or female. Use "aap" always — never "bhai", "behen", "sahib", "madam". Use neutral/formal verb forms for the caller.
 
@@ -330,7 +343,7 @@ READING CODES — VERY IMPORTANT: Whenever you say a ticket number, seat number,
 - Never say AA for the letter A. Say A once, clearly.
 - Never add extra Urdu words around a code.
 
-NAME CAPTURE RULE — When a caller gives ANY name (even just a first name), accept it immediately and move on. Do NOT insist on a full name. Do NOT keep asking for more. Just say 'Shukriya [name] sahab/ji' and continue. If the name is completely inaudible or unclear, ask once: 'Zaroor, aap apna naam bata sakte hain?' but never ask more than once. A single name, a nickname, anything they give — accept it and proceed.
+NAME CAPTURE RULE — When a caller gives ANY name (even just a first name), accept it immediately and move on. Do NOT insist on a full name. Do NOT keep asking for more. Just say "شکریہ [name] جی" and continue. CRITICAL: whenever you say the caller's name — here or later when confirming — always write it in English/Latin letters (Roman), NEVER in Urdu script (for example "شکریہ Bilal جی", not "شکریہ بلال جی"), so the name is pronounced correctly. If the name is completely inaudible or unclear, ask once: "ضرور، آپ اپنا نام بتا سکتے ہیں؟" but never ask more than once. A single name, a nickname, anything they give — accept it and proceed.
 
 NO PHONE NUMBER RULE — Do NOT ask the caller for their phone number. You already have it from the incoming call. Never ask for it, never repeat it back.
 
@@ -342,7 +355,7 @@ NUMBER READING RULE — Always say ALL numbers in English. Never translate numbe
 
 COMPLAINT FLOW — Follow this exact sequence:
 Step 1 - OPENING: Greet the caller warmly as Ahmed from Daewoo Express. Ask how you can help. Keep it short and natural.
-Step 2 - ACKNOWLEDGE + CATEGORIZE: Acknowledge their frustration genuinely — one sentence. Identify complaint type: bus_delay, staff_behavior, ticket_issue, refund, or luggage. If unclear, ask one question. Do not collect details yet.
+Step 2 - ACKNOWLEDGE + CATEGORIZE: Acknowledge their frustration genuinely — one sentence. Identify complaint type. When you mention the categories out loud to the caller, use these EXACT Urdu words and no others: بس کی تاخیر (bus delay), عملے کا رویہ (staff behavior), ٹکٹ کا مسئلہ (ticket issue), رقم کی واپسی (refund), سامان (luggage). Never translate these literally or invent your own wording — use exactly these phrases. If unclear, ask one question. Do not collect details yet.
 Step 3 - COLLECT NAME: Ask for their name. The moment they say ANY name — one word, two words, a nickname, anything — say "جی، [name]" and IMMEDIATELY move to Step 4. NEVER ask for a full name. NEVER ask them to repeat or confirm their name. NEVER say "کیا آپ پورا نام بتا سکتے ہیں". One word is enough. Move on instantly.
 Step 4 - COLLECT DETAILS: Ask them to describe exactly what happened. If travel-related, ask for route or date if not mentioned. One question at a time.
 Step 5 - CONFIRM DETAILS: Read back everything — name, complaint type, description. Do NOT mention phone number. Ask for confirmation.
@@ -427,13 +440,11 @@ class DaewooAgent(Agent):
         self._complaint_data: dict | None = None
 
     async def on_enter(self) -> None:
-        # LLM generates the opening greeting (pure Urdu, per the system prompt).
-        self.session.generate_reply(
-            instructions=(
-                "گرم جوشی سے سلام کریں اور بتائیں کہ آپ احمد ہیں، ڈائیوو ایکسپریس کی طرف سے۔ "
-                "پوچھیں کہ آپ کیسے مدد کر سکتے ہیں — بکنگ دیکھنی ہے یا کوئی شکایت درج کرانی ہے۔ "
-                "صرف سادہ اردو رسم الخط میں جواب دیں، کوئی انگریزی یا رومن حروف نہیں۔ صرف ایک مختصر فطری جملہ۔"
-            ),
+        # Fixed greeting (not LLM-generated): identical text every call, so the Orpheus
+        # pronunciation map (Assalam/Ahmed/Daewoo/booking/complaint) always applies cleanly.
+        self.session.say(
+            "السلام علیکم! میں احمد ہوں، ڈائیوو ایکسپریس کی طرف سے۔ "
+            "میں آپ کی کیا مدد کر سکتا ہوں — بکنگ دیکھنی ہے یا کوئی شکایت درج کرانی ہے؟",
             allow_interruptions=False,
         )
 
@@ -530,9 +541,10 @@ ORPHEUS_PRONUNCIATION = {
     "ڈائیوو ایکسپریس": "Daewoo Express",
     "ڈائیو ایکسپریس": "Daewoo Express",
     "احمد": "Ahmed",
-    "بُکنگ": "booking",
     "بکنگ": "booking",
-    "شکایت": "complaint",
+    "بُکنگ": "booking",
+    "ٹکٹ": "ٹِکَٹ",
+    "رقم کی واپسی": "refund",
 }
 
 
@@ -591,11 +603,14 @@ class _OrpheusChunkedStream(tts.ChunkedStream):
 
 def build_tts():
     engines = []
-    if USE_SELF_HOSTED:
-        logger.info(f"TTS: self-hosted Orpheus ({LOCAL_TTS_URL}) → ElevenLabs → OpenAI nova")
-        # Orpheus exposes an OpenAI-compatible /v1/audio/speech endpoint, so the
-        # standard OpenAI TTS plugin drives it directly (no custom plugin needed).
-        engines.append(OrpheusTTS(base_url=LOCAL_TTS_URL))
+    if USE_UPLIFT:
+        logger.info(f"TTS: Uplift AI (voice={UPLIFT_VOICE_ID}, {UPLIFT_OUTPUT_FORMAT}) → ElevenLabs → OpenAI nova")
+        # Uplift AI is an off-GPU Urdu-native cloud TTS. The plugin reads the key
+        # from the UPLIFTAI_API_KEY env var (loaded via .env above).
+        engines.append(upliftai.TTS(
+            voice_id=UPLIFT_VOICE_ID,
+            output_format=UPLIFT_OUTPUT_FORMAT,
+        ))
     if ELEVENLABS_API_KEY:
         engines += [
             # multilingual_v2: highest quality, best Urdu pronunciation
@@ -634,7 +649,7 @@ def build_tts():
 
 def prewarm(proc: agents.JobProcess):
     proc.userdata["vad"] = silero.VAD.load(
-        min_silence_duration=0.2,    # 200ms — snappier without cutting off speech
+        min_silence_duration=0.5,    # 500ms — bridges natural mid-sentence pauses
         activation_threshold=0.25,   # lower = more sensitive (good for WebRTC)
     )
 
@@ -663,14 +678,16 @@ async def entrypoint(ctx: JobContext):
         preemptive_generation=True,
         # _fix_pronunciation is ElevenLabs-tuned (rewrites Urdu→Roman). Orpheus is
         # Urdu-native and wants the original script, so skip it when self-hosted.
-        tts_text_transforms=[] if USE_SELF_HOSTED else [_fix_pronunciation],
+        # Uplift AI is Urdu-native and wants the original Urdu script, so skip the
+        # ElevenLabs Roman-rewrite transform when Uplift is the primary TTS.
+        tts_text_transforms=[] if USE_UPLIFT else [_fix_pronunciation],
     )
 
     # Faster turn detection — respond sooner after user stops speaking
     if HAS_TURN_HANDLING:
         session_kwargs["turn_handling"] = TurnHandlingOptions(
-            min_delay=0.1,   # near-instant response after speech ends
-            max_delay=1.5,   # cap wait at 1.5s
+            min_delay=0.3,   # small wait after speech ends (not instant)
+            max_delay=3.0,   # wait up to 3s through thinking pauses before responding
         )
 
     if MULTILINGUAL_TURN_DETECTION:
