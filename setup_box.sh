@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-shot setup for a fresh GPU box (PyTorch template, CUDA 12.x).
-# Target: single 48GB card (e.g. L40S/A6000). Stack = Qwen-14B LLM + Whisper STT
+# Target: A100 80GB. Stack = Qwen2.5-72B-AWQ LLM + Whisper large-v3 STT
 # on the GPU; TTS is OFF-box via Uplift AI cloud API (no local TTS server).
 # Run from /workspace after: git clone https://github.com/Abdrehman2002/Build3.git
 # Usage:  bash /workspace/Build3/setup_box.sh
@@ -22,10 +22,10 @@ pip install aiohttp
 python -m livekit.agents download-files            # turn-detector model
 cd /workspace
 
-echo "=== [4/4] Download models (Qwen2.5-14B-AWQ + Whisper large-v3) ==="
+echo "=== [4/4] Download models (Qwen2.5-72B-AWQ + Whisper large-v3) ==="
 mkdir -p /workspace/models
 export HF_HUB_ENABLE_HF_TRANSFER=1
-hf download Qwen/Qwen2.5-14B-Instruct-AWQ   --local-dir /workspace/models/qwen14
+hf download Qwen/Qwen2.5-72B-Instruct-AWQ   --local-dir /workspace/models/qwen72
 hf download Systran/faster-whisper-large-v3 --local-dir /workspace/models/whisper
 
 echo "=== Place STT server script ==="
